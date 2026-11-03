@@ -8,58 +8,65 @@ app.use(cors());
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*", 
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// The master database structure holding all your sub-lists
+// Ground state database schema configuration mapping
 let databaseState = {
-  "lobby": ["Welcome to the server engine!"] // Default starting sub-list
+  "lobby": {
+    "rooms": {}
+  }
 };
 
+// Traverses a structural pathway tree reference pattern to return target mutations
+function getNestedTarget(obj, pathStr) {
+  if (!pathStr || pathStr.trim() === '') return obj;
+  const parts = pathStr.split('/');
+  let current = obj;
+  for (let part of parts) {
+    if (current[part] === undefined) {
+      current[part] = {}; 
+    }
+    current = current[part];
+  }
+  return current;
+}
+
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-  
-  // Instantly send the whole database state to anyone who connects
   socket.emit('list_state', databaseState);
 
-  // 1. Create a brand-new sub-list (like a new room or lobby)
-  socket.on('create_sub_list', (listName) => {
-    if (listName && !databaseState[listName]) {
-      databaseState[listName] = [];
-      io.emit('list_update', databaseState); // Broadcast updated structural layout to everyone
-      console.log(`Sub-list created: ${listName}`);
+  // 1. Instantiates a child leaf array at path locations
+  socket.on('create_nested_list', (payload) => {
+    const { path, newListName } = payload;
+    const target = getNestedTarget(databaseState, path);
+    if (target && typeof target === 'object' && !Array.isArray(target)) {
+      if (!target[newListName]) {
+        target[newListName] = []; // Creates a clean nested list container block
+        io.emit('list_update', databaseState);
+      }
     }
   });
 
-  // 2. Add an item to a specific sub-list
-  socket.on('add_to_sub_list', (data) => {
-    const { listName, value } = data;
-    if (listName && value) {
-      // If the sub-list doesn't exist yet, automatically initialize it
-      if (!databaseState[listName]) {
-        databaseState[listName] = [];
-      }
-      databaseState[listName].push(value);
-      io.emit('list_update', databaseState); // Broadcast update
-      console.log(`Added "${value}" to sub-list "${listName}"`);
+  // 2. appends value structures into child leaf arrays
+  socket.on('add_to_path', (payload) => {
+    const { path, value } = payload;
+    const target = getNestedTarget(databaseState, path);
+    if (Array.isArray(target)) {
+      target.push(value);
+      io.emit('list_update', databaseState);
     }
   });
 
-  // 3. Delete an item from a specific sub-list by its index number
-  socket.on('delete_from_sub_list', (data) => {
-    const { listName, index } = data;
-    if (listName && databaseState[listName] && Array.isArray(databaseState[listName])) {
-      if (index >= 0 && index < databaseState[listName].length) {
-        databaseState[listName].splice(index, 1);
-        io.emit('list_update', databaseState); // Broadcast update
-        console.log(`Deleted item at index ${index} from sub-list "${listName}"`);
-      }
+  // 3. removes child structural data indices from branch tracks
+  socket.on('delete_from_path', (payload) => {
+    const { path, index } = payload;
+    const target = getNestedTarget(databaseState, path);
+    if (Array.isArray(target) && index >= 0 && index < target.length) {
+      target.splice(index, 1);
+      io.emit('list_update', databaseState);
     }
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Multi-List Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Infinite-Nest Network Engine running on port ${PORT}`));
